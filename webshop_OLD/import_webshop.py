@@ -1,45 +1,31 @@
+#
+#
+
 import sys
-import os
 from sqlalchemy.engine import create_engine
-from sqlalchemy import text
 import re
 import datetime
 import csv
 import random
 
-
 cache = {}
 connection = None
-file_csv = 'webshop-facts.csv'
 
 def main():
+ 
     global connection
-    global file_csv
-
-    if len(sys.argv) > 1:
-        file_csv = sys.argv[1]
-
-    if not os.path.exists(file_csv):
-        print(f"\nFILE with name {file_csv} does NOT exist. Quitting.\n")
-        exit(-1)
     
     # Open source
     engine = create_engine("sqlite:///webshop.sqlite")
     connection = engine.connect()
-
-    # re-installation of the whole database (total cleanup)
-    with open("webshop-structure.sql",'rb') as sf:
-        sqlite3_conn = connection.connection
-        sql_script = sf.read().decode('utf-8')
-        print("\n===== SQL SCRIPT: ", sql_script,"\n\n")
-        sqlite3_conn.executescript(sql_script)
-
-    # connection.execute("DELETE FROM dates");
-    # connection.execute("DELETE FROM customers");
-    # connection.execute("DELETE FROM countries");
-    # connection.execute("DELETE FROM products");
-    # connection.execute("DELETE FROM sales");
-    # connection.execute("DELETE FROM webvisits")
+    
+    # Cleanup
+    connection.execute("DELETE FROM dates");
+    connection.execute("DELETE FROM customers");
+    connection.execute("DELETE FROM countries");
+    connection.execute("DELETE FROM products");
+    connection.execute("DELETE FROM sales");
+    connection.execute("DELETE FROM webvisits")
     
     # Import facts and dimension data
     import_sales()
@@ -66,7 +52,7 @@ def save_object(table, row):
     sql = sql + ", ".join([ ("'" + str(row[key]) + "'") for key in keys])
     sql = sql + ")"
     
-    print("Inserting - Table: %-14s Id: %s" % (table, row["id"]))
+    print "Inserting - Table: %-14s Id: %s" % (table, row["id"])
     #print sql
     
     connection.execute(sql);
@@ -153,10 +139,10 @@ def generate_dates():
         cur_date = cur_date + datetime.timedelta(days = +1)
     
 def import_sales():
+    
     count = 0
-    incorrect_rows_count = 0
     header = None
-    with open(file_csv, 'r') as f:
+    with open('webshop-facts.csv', 'rb') as f:
         reader = csv.reader(f)
         for row in reader:
             
@@ -168,18 +154,9 @@ def import_sales():
                 continue
             
             arow = {}
-
-            incorrect_row = False
             for header_index in range (0,  len(header)):
                 arow[(header[header_index])] = row[header_index]
-                if row[header_index] is None or str(row[header_index]) == "":
-                    incorrect_row = True
-
-            if incorrect_row:
-                print(f"\n== incorrect ROW index: {count} - skipping\n")
-                incorrect_rows_count += 1
-                continue
-
+            
             # Process row
             fact["date_id"] = insert_date(arow["date_created.year"], arow["date_created.month"], arow["date_created.day"])
             fact["country_id"] = insert_country(arow["country.region"], arow["country.country"])
@@ -187,16 +164,12 @@ def import_sales():
             fact["product_id"] = insert_product(arow["product.category"], arow["product.name"])
             
             # Import figures (quick hack for localization issues):
-            if arow['quantity'] is None or arow['quantity'] == "" or arow['price_total'] is None or arow['price_total'] == "":
-                continue
-
             fact["quantity"] = float(str(arow["quantity"]).replace(",", "."))
             fact["price_total"] = float(str(arow["price_total"]).replace(",", "."))
             
-            print(f"\n======= Inserting sales row: {count}\n")
             insert_sale(fact)
             
-    print(f"== Imported {count} facts. Incorrect rows no: {incorrect_rows_count}\n\n")
+    print "Imported %d facts " % (count)
 
 def generate_webvisits():
     
@@ -204,13 +177,13 @@ def generate_webvisits():
         
         fact = { "id" : i }
         
-        fact["country_id"] = random.choice (list(cache["countries"].keys()))
-        fact["date_id"] = random.choice (list(cache["dates"].keys()))
+        fact["country_id"] = random.choice (cache["countries"].keys())
+        fact["date_id"] = random.choice (cache["dates"].keys())
         
-        fact["browser"] = random.choice (list(["Lynx", "Firefox", "Firefox", "Chrome", "Chrome", "Chrome"]))
-        fact["newsletter"] = random.choice (list(["Yes", "No", "No", "No"]))
+        fact["browser"] = random.choice (["Lynx", "Firefox", "Firefox", "Chrome", "Chrome", "Chrome"])
+        fact["newsletter"] = random.choice(["Yes", "No", "No", "No"])
         
-        fact["source_label"] = random.choice(list(["Web search", "Web search", "Direct link", "Unknown"]))
+        fact["source_label"] = random.choice(["Web search", "Web search", "Direct link", "Unknown"])
         fact["source_id"] = sanitize(fact["source_label"])
         
         fact["pageviews"] = abs(int (random.gauss (7, 6))) + 1
